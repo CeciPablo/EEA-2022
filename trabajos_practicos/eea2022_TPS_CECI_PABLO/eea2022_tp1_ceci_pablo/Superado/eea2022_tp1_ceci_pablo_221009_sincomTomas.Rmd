@@ -1,0 +1,1043 @@
+---
+title: 'TP 1: Regresión lineal'
+output:
+  html_document:
+    df_print: paged
+---
+
+# Grupo De Discusión
+
+Bocco Juan, Ceci Pablo, Delvechio Tomas
+
+# Librerías
+
+## Instalación
+
+```{r}
+options(repos = c(CRAN = "http://cran.rstudio.com"))
+install.packages("aplpack") # permite hacer caritas de Chernov
+install.packages("corrplot") # permite personalizar colores y estilos de fuente para gráficos
+install.packages("ggplot2") # permite realizar gráficos con movimiento
+install.packages("plotrix") # permite realizar gráficos de torta con volumen
+install.packages("rgl") # permite realizar gráficos en 3D
+install.packages("tcltk") # posee comandos de lenguaje de herramientas para la creación de interfases gráficas
+install.packages("tcltk2") # posee comandos adicionales a tcltk
+install.packages("dplyr") # permite manipular datos
+install.packages("tidyverse")
+install.packages("GGally")
+install.packages("devtools") # ==> reemplaza en esta versión de R a install.packages("ggbiplot")
+install.packages("readxl")
+install.packages("ggdendro")
+install.packages("dendextend")
+install.packages("ape")
+install.packages('tidymodels')
+install.packages("writexl")
+install.packages("mvnormtest")
+install.packages("biotools")
+install.packages("klaR")
+install.packages('mlbench')
+install.packages("mlr")
+install.packages("factoextra")
+install.packages("lda")
+```
+
+## Carga
+
+```{r}
+library(grDevices)
+library(tcltk)
+library(aplpack)
+library(corrplot)
+library(readxl)
+library(dplyr)
+library(modeest)       #arroja error en colab
+library(ggplot2)
+library(GGally)
+library(devtools)
+library(ggdendro)
+library(dendextend)
+library(ape)
+library(tidymodels)    #arroja error en colab
+library(writexl)
+library(mvnormtest)
+library(biotools)
+library(klaR) 
+library(rsample)
+library(mlbench)
+library(mlr)
+library(cluster)
+library(factoextra)
+library(stats)
+library(lda)
+require("yardstick")
+```
+
+# 1) Análisis exploratorios
+
+## Leer el archivo "encuesta_salud_train.csv". ¿Qué puede mencionar sobre su estructura y variables?
+
+```{r}
+#Lectura del archivo encuesta_salud_train:
+
+rm( list=ls() )  #remove all objects
+gc()             #garbage collection
+
+ES_train <- read.csv("c:/TEAPCX/CECI/MaestriaDataMining/EEA/EEA-2022/trabajos_practicos/Datasets/encuesta_salud_train.csv")
+```
+
+```{r}
+View(ES_train)
+```
+
+**Luego de correr la línea precedente, es observable que se trata de un archivo estructurado por 16 variables (columnas) que describen 7024 observaciones (registros) de personas de entre 12 y 18 años de edad.**
+
+A continuación, analizaremos el tipo de objeto en el cual están contenidos dichos registros con sus respectivos valores para las distintas variables:
+
+```{r}
+typeof(ES_train)
+```
+
+Varias librerías para operar requieren como entrada objetos tipo data frames:
+
+```{r}
+df_ES_train <- as.data.frame(ES_train)
+```
+
+**Analizo el tipo de variables en el set de datos:**
+
+```{r}
+str(df_ES_train, vec.len=1, nchar.max=150)
+```
+
+o también mediante la siguiente función:
+
+```{r}
+glimpse(df_ES_train)
+```
+
+De las 16 variables, tenemos:
+
+-   tipo número entero (int): 6
+
+-   tipo número (num double): 1
+
+-   tipo texto (chr): 9
+
+A continuación, para las variables numéricas realizamos un primer análisis de sus valores:
+
+```{r}
+df_ES_train %>%
+    dplyr::select(-one_of('record')) %>%
+      dplyr::select_if(., is.numeric)%>%
+        summary(.)
+```
+
+## ¿Cómo es la correlación entre las variables numéricas? Utilice y analice en detalle algún gráfico que sirva para sacar conclusiones sobre la asociación de variables realizando apertura por género. En particular, ¿cómo es la correlación entre la variable a explicar (peso) y el resto de las variables numéricas?
+
+```{r}
+require(dplyr)
+
+df_ES_train %>% 
+  dplyr::select(edad, altura, peso, dias_consumo_comida_rapida, consumo_diario_alcohol, dias_actividad_fisica_semanal) %>%# desestimamos algunas variables
+  ggpairs(.,
+            mapping = aes(colour = df_ES_train$genero, alpha = 0.5),
+            title = "Matriz de correlaciones",
+            diag = list(continuous = "densityDiag", alpha=0.5),
+            upper = list(continuous = wrap("cor", size = 2.5, hjust=0.5)),
+            lower = list(continuous = wrap("barDiag", size = 3, hjust=0.5)),
+            legend = 12,
+            labelSize = 8) + 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45, vjust=0.5), legend.position = "bottom")
+```
+
+La correlación es una medida estadística útil para analizar asociación entre variables. Puede tomar valores de +1 a -1 donde un valor de 0 indica la no asociación entre variables. Valores mayores a 0 indican asociación positiva, es decir que el aumento del valor de una de ellas se verá reflejado en la otra. Por el contrario, valores menores a 0 indican asociaciones negativas donde el aumento de una variable se refleja en la disminución de la otra. Una correlación negativa se interpreta como relación inversa, una positiva como una relación directa y una correlación nula la falta de asociación entre la variabilidad de una frente a la otra. De esto último es importante destacar que una correlación nula, no significa inexistencia de relación lineal alguna entre las variables, sino que no es posible determinar algún sentido de co-variación entre ambas.
+
+Con respecto a la variable a explicar, el peso, es posible ver que la mayor correlatividad se presenta con la altura en un valor mayor a cero y próximo a 0,6. Es decir que nos estaría indicando que a mayor altura es de esperar un mayor peso. Este valor desciende considerablemente cuando uno observa la apertura por género donde la correlación se mantiene para el género masculino pero decae para el femenino.
+
+Frente a la edad, también presenta una correlación positiva de alrededor de 0,3. Sin embargo en este caso, al desglosar por género, la correlación masculina se encuentra se encuentra por encima de la conjunta cuando la femenina se posiciona por debajo de dicho valor. Mismo efecto pero con correlación negativa es posible observar con el consumo de comida rápida.
+
+Luego, el peso con respecto al consumo diario de alcohol presenta un comportamiento similar al visto con la comida rápida pero con distinto signo, una correlación levemente positiva.
+
+Por último, los días de actividad física semanal, si bien presenta una correlación levemente positiva con el peso, muestra una particularidad que la distingue de las otras relaciones. En este caso, al subdividir por género, ambos valores quedan por debajo de la correlación conjunta.
+
+## Para las categorías de la variable frecuencia de hambre mensual, analice gráficamente la distribución en términos de frecuencia relativa de consumo semanal de verdura y consumo semanal de grasa. ¿Cuáles son las principales características que observa en estos gráficos?
+
+Primeramente observemos cuán representativos son los datos perdidos para la frecuencia de hambre mensual:
+
+```{r}
+df_ES_train %>% count(frecuencia_hambre_mensual, sort = TRUE)
+```
+
+De las 7.024 observaciones se encuentra que solamente 39 de ellas (0,55% aprox.) se corresponden con datos perdidos para la frecuencia de hambre mensual lo cual no afectará el posterior análisis sobre las siguientes gráficas:
+
+### a) Consumo semanal de verdura
+
+```{r}
+#Reordenamiento del factor de frecuencia de hambre mensual:
+df_ES_train$frecuencia_hambre_mensual <- factor(df_ES_train$frecuencia_hambre_mensual, levels = c('Nunca','Rara vez','Algunas veces','Casi siempre','Siempre','Dato perdido'))
+```
+
+```{r}
+#Reordenamiento del factor de frecuencia de consumo semanal de verdura:
+df_ES_train$consumo_semanal_verdura <- factor(df_ES_train$consumo_semanal_verdura, levels = c('No comí verduras ni hortalizas durante los últimos 7 días','1 a 3 veces durante los últimos 7 días','4 a 6 veces durante los últimos 7 días','1 vez al día','2 veces al día', '3 veces al día', '4 o más veces al día','Dato perdido'  ))
+```
+
+```{r}
+df_ES_train %>%filter(df_ES_train$frecuencia_hambre_mensual!="Dato perdido")%>% 
+ggplot(aes(consumo_semanal_verdura, group = frecuencia_hambre_mensual)) + 
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat="count") + 
+  labs(color='frecuencia_hambre_mensual') +
+  scale_color_hue(labels=c('0', '2', '5', '7', '21', '28')) +
+  facet_grid(~frecuencia_hambre_mensual) +
+  scale_y_continuous(labels=scales::percent)+
+  theme(
+    axis.title.x = element_text(size=8),
+    axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=1),
+    axis.title.y = element_text(size=8, angle = 90),
+    axis.text.y = element_text(size=8)
+  )
+```
+
+Son observables las siguientes características principales:
+
+-   Mayor consumo de verdura diaria asociado con menor frecuencia de hambre.
+
+-   Ausencia de ingesta de verdura asociada con mayor frecuencia de hambre.
+
+### b) Consumo semanal de comida grasa.
+
+```{r}
+#Reordenamiento del factor del consumo semanal de grasa:
+df_ES_train$consumo_semanal_comida_grasa <- factor(df_ES_train$consumo_semanal_comida_grasa, levels = c('No comí comida alta en grasa en los últimos 7 días', '1 a 3 veces durante los últimos 7 días', '4 a 6 veces durante los últimos 7 días', '1 vez al día', '2 veces al día', '3 veces al día', '4 o más veces al día', 'Dato perdido'))
+```
+
+```{r}
+df_ES_train %>%filter(df_ES_train$frecuencia_hambre_mensual!="Dato perdido")%>% 
+ggplot(aes(consumo_semanal_comida_grasa, group = frecuencia_hambre_mensual)) + 
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat="count") + 
+  labs(color='frecuencia_hambre_mensual') +
+  scale_color_hue(labels=c('0', '2', '5', '7', '21', '28')) +
+  facet_grid(~frecuencia_hambre_mensual) +
+  scale_y_continuous(labels=scales::percent)+
+  theme(
+    axis.title.x = element_text(size=8),
+    axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=1),
+    axis.title.y = element_text(size=8, angle = 90),
+    axis.text.y = element_text(size=8)
+  )
+```
+
+Son observables las siguientes características principales:
+
+-   El consumo de grasas de más de 4 veces al día se asocia con tener siempre hambre.
+
+-   Al observar la gráfica, no son perceptibles diferencias que pudieran considerarse estadísticamente significativas por el menor consumo semanal de grasas respecto a la frecuencia de hambre.
+
+# 2) Modelo inicial
+
+Se plantea que una primera alternativa para modelar el peso es:
+
+**E(peso) = β0 + β1 altura + β2 edad + β3 genero + β4 diasActividadFisicaSemanal + β5 consumoDiarioAlcohol**
+
+## ¿Cuál es la interpretación de cada uno de los coeficientes estimados? ¿Son significativos? ¿El modelo resulta significativo para explicar el peso? ¿Qué porcentaje de la variabilidad explica el modelo?
+
+```{r}
+# Ajuste modelo lineal multiple:
+
+modelo_incial <- lm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = df_ES_train)
+
+# Resumen
+
+tidy_mi <- tidy(modelo_incial, conf.int = TRUE)
+tidy_mi
+```
+
+### **Interpretación de los coeficientes estimados**
+
+-   El valor **estimado** de **β0** representa la ordenada al origen y toma un valor de -68.96 que se corresponde numéricamente al peso esperado de una adolescente femenina (categoría basal para la variable categórica 'género') sin altura, edad, que no realiza actividad física ni consume diariamente alcohol. Lo cual carece de sentido fáctico.
+
+-   El valor 0.65 **estimado** del coeficiente **βaltura** nos señala que aplicando el concepto de ceteris paribus, todo el resto de las variables fijas, por cada aumento en una unidad de altura, en promedio el peso de un adolescente aumentará 0.65 Kg.
+
+    Otra interpretación válida, es que teniendo dos personas del mismo género y edad realizando igual actividad física semanal, pero una de ellas con un centímetro más de altura, entonces el peso esperado de dicha persona sería de 0.65 Kg por sobre el peso de la otra.
+
+-   Análogamente a lo anteriormente mencionado el coeficiente de la edad incide en 1.4. Nuevamente, considerando el criterio de ceteris paribus, a igualdad de adolescentes, si uno de ellos es un año mayor, entonces se espera presente un peso 1.4 Kg mayor.
+
+-   Con respecto al valor **estimado** de 1.26 del coeficiente **βgeneroMasculino** nos indica el desplazamiento paralelo del género masculino respecto de la curva de la categoría basal (femenino).
+
+    Al determinarse el género para el dato observado, si es masculino, tomará como valor binario el número uno. Así, la ordenada al origen de la curva asociada a la categoría basal femenina, **β0**, se transformará en: **β3 = β0** + **βgeneroMasculino**.
+
+    A continuación se representan dos pares de datos de ambos sexos para visualizar gráficamente lo anteriormente mencionado:
+
+```{r}
+
+#F1: altura 167, edad 16, genero 0, días_actv_fís 0, consm_día_alcohol 0)
+#F2: altura 175, edad 16, genero 0, días_actv_fís 0, consm_día_alcohol 0)
+
+#M1: altura 167, edad 16, genero 1, días_actv_fís 0, consm_día_alcohol 0)
+#M2: altura 175, edad 16, genero 1, días_actv_fís 0, consm_día_alcohol 0)
+
+# Datos
+x <- c(1, 2)
+yf <- c(62.23623774, 67.44109009)
+ym <- c(63.4988813, 68.70373365)
+
+# Vectores
+plot(x, yf, type = "l", xlab = "Adolescente", ylab = "Peso", xaxp = c(1, 2, 1), col=2)
+lines(x, ym, type = "l", col = 5)
+
+```
+
+-   Acompañando lo intuitivo, la actividad física semanal produce un efecto en sentido opuesto a los otros coeficientes (excluyendo el intercepto) dado que a mayor actividad física se espera un peso menor. Es decir, que dos adolescentes de la misma altura, edad, género, pero en la que una de ellas realice una unidad más de actividad física (al menos 60 minutos en la última semana) con respecto de la otra, entonces se esperará que dicha persona que realice una unidad más de ejercicio presente un peso esperado menor a la otra en -0.087 Kg. De todas maneras, no es apreciable. Veámoslo gráficamente:
+
+```{r}
+
+#F1: altura 167, edad 16, genero 0, días_actv_fís 0, consm_día_alcohol 0)
+#F2: altura 167, edad 16, genero 0, días_actv_fís 1, consm_día_alcohol 0)
+
+#M1: altura 167, edad 16, genero 1, días_actv_fís 0, consm_día_alcohol 0)
+#M2: altura 167, edad 16, genero 1, días_actv_fís 1, consm_día_alcohol 0)
+
+# Datos
+x <- c(0, 1)
+yf <- c(62.23623774, 62.14884671)
+ym <- c(63.4988813, 63.41149027)
+
+# Vectores
+plot(x, yf, type = "l",xlab = "Adolescente", ylab = "Peso", xlim = c(0, 1), ylim = c(62, 64 ), xaxp = c(0, 1, 1), col=2)
+lines(x, ym, type = "l", col = 5)
+```
+
+-   Finalmente, el **estimado** del coeficiente **βconsumoOH** es prácticamente imperceptible y lo veremos luego cuando lo analicemos desde el punto de vista de su significatividad a partir de su p-valor.
+
+    ### **Significatividad de los coeficientes estimados**
+
+    **Test para significatividad individual de los βk**
+
+    Para evaluar la significativdad individual de cada coeficiente se realiza el test **t** para probar si el coeficiente de regresión correspondiente a dicha variable es distinto de 0, es decir:
+
+    -   Ho: βk = 0
+
+    -   H1: βk ≠0
+
+    ```{r}
+    tidy_mi %>%
+      dplyr::select(term, statistic, p.value, conf.low, conf.high) 
+    ```
+
+    En este modelo inicial las variables altura, edad y genero resultan estadísticamente significativas para explicar el peso de los adolescentes dado que presentan p-valores \< 0.05 e intervalos de confianza (IC) al 95% que no contienen al 0.
+
+    Contrariamente, las variables días de actividad física semanal y consumo diario de alcohol no demuestran evidencia estadística significativa para explicar el peso arrojando p-valores \> 0.05 e incluyendo al 0 dentro del IC al 95%.
+
+    ### **Significatividad del modelo para explicar el peso**
+
+    **Test para significatividad del modelo**
+
+    En muchas situaciones los coeficientes individuales son de suma importancia para el experimentador dado el significado particular de los mismos, por ejemplo en estudios socio-económicos. Sin embargo, existen otras situaciones, por ejemplo industriales, en donde el interés puede estar puesto en la habilidad de la función completa para pronosticar la respuesta más que en los parámetros individuales.
+
+    No obstante que el modelo completo sea significativo, esto no excluye la posibilidad de:
+
+    -   El modelo no es el único para explicar dado que por ejemplo un modelo con transformaciones de las variables pudieran llegar a arrojar valores aún más significativos.
+
+    -   El modelo podría ser más eficaz con la inclusión de otras variables o con la eliminación de alguna / algunas de ellas.
+
+    ```{r}
+    summary(modelo_incial)
+    ```
+
+    **El modelo tiene un R2 ajustado que indica que es capaz de explicar el 35,4% de la variabilidad observada. Por otro lado, con un *p-value* de 2.2e-16 se concluye que el modelo es estadísticamente significativo.**
+
+    Previamente, vimos que dos de los coeficientes, individualmente, no eran significativos por lo que se sospecha que podrían no estar contribuyendo al modelo.
+
+# 3) Modelo categóricas
+
+Se sugiere probar un modelo que incorpore el consumo semanal de snacks y una interacción entre el género y la edad, en lugar de actividad física:
+
+E(peso) = β0 + β1altura + β2edad + β3genero + β4consumoSemanalSnacks + β5genero · edad
+
+## Además se pide explícitamente que la categoría "No comí comida salada o snacks en los últimos 7 días" de la variable consumoSemanalSnacks se encuentre como nivel/categoría basal.
+
+Observemos primeramente cómo está ordenada la variable consumo semanal de snaks:
+
+```{r}
+table(df_ES_train$consumo_semanal_snacks)
+```
+
+```{r}
+#Reordenamiento del consumo semanal de snacks:
+df_ES_train$consumo_semanal_snacks <- factor(df_ES_train$consumo_semanal_snacks, levels = c('No comí comida salada o snacks en los últimos 7 días', '1 a 3 veces durante los últimos 7 días', '4 a 6 veces durante los últimos 7 días', '1 vez al día', '2 veces al día', '3 veces al día', '4 o más veces al día', 'Dato perdido'))
+```
+
+Verifiquemos luego del re-ordenamiento:
+
+```{r}
+table(df_ES_train$consumo_semanal_snacks)
+```
+
+## MODELO
+
+### ¿Cuál es la interpretación de los coeficientes estimados para las categorías de consumoSemanalSnacks y genero . edad?
+
+Re-formulemos la ecuación del modelo en función del género para realizar una primera interpretación:
+
+Ypeso = β0 + β1 altura + β2 edad + β3 genero + β4 consumoSemanalSnacks + β5 genero · edad
+
+-   Si es mujer:
+
+Ypeso = (β0 + β4nobasal) + β1 altura + β2 edad
+
+-   Si es hombre:
+
+    Ypeso = (β0 +β3 + β4nobasal) + β1altura + (β2+β5) edad
+
+Ahora observamos que la interacción agrega otro tipo de fenómeno con respecto al modelo binario anterior que solamente incidía en la ordenada al origen dejando paralelas a las curvas según género del individuo. En este caso, la interacción genera un cambio en la pendiente de la curva de los hombres reflejado sobre la variable edad. Es decir, que por cada cambio en una unidad de la edad de una mujer, siempre a ceteris paribus, los masculinos aumentarán en β5 la pendiente con respecto a la femenina con parámetro β2.
+
+El β4 generará un efecto análogo al de la variable binaria por género, solo que en este caso generará un abanico de desplazamientos, de curvas paralelas.
+
+Corriendo el siguiente script se obtienen los siguientes resultados:
+
+```{r}
+# ajustamos el modelo
+modelo_cat <- lm(peso ~ altura + edad + genero + consumo_semanal_snacks + (genero*edad) , data = df_ES_train)
+tidy_cat <- tidy(modelo_cat, conf.int = TRUE)
+tidy_cat
+```
+
+La categoría de referencia, basal, se corresponde con la no ingesta de snacks en la última semana.
+
+El modelo propone ajustar distintas curvas para el **peso** **medio** de cada población definida por el consumo semanal de snacks generando diferentes ordenadas al origen, una por cada tipo de consumo distinto al basal.
+
+Veamos los siguientes ejemplos gráficos representando los efectos sobre el modelo según diversos tipos de datos.
+
+Los datos estarán representados por vectores cuyos valores de las componentes respetarán el siguiente orden: altura, edad, generoMasculino, consumo_semanal_snacks4 a 6 veces durante los últimos 7 días, consumo_semanal_snacks1 vez al día, consumo_semanal_snacks2 veces al día, consumo_semanal_snacks3 veces al día, consumo_semanal_snacks4 o más veces al día, consumo_semanal_snacksDato perdido
+
+```{r}
+#Consumo basal de snacks. Efecto género:
+# Se generan los mismos dos datos por genero. Con consumo de snacks basal y diferencia de altura. 
+
+#F1: (160, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+#F2: (170, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+ 
+#M1: (160, 18, 1, 0, 0, 0, 0, 0, 0, 0, 18)
+#M2: (170, 18, 1, 0, 0, 0, 0, 0, 0, 0, 18)
+
+# Datos
+x <- c(0, 1)
+yf <- c(60.6838489,67.1130719)
+ym <- c(63.1185976, 69.5478206)
+
+# Vectores
+plot(x, yf, type = "l",xlab = "Adolescente", ylab = "Peso", xlim = c(0, 1), ylim = c(60, 70 ), xaxp = c(0, 1, 1), col=2)
+lines(x, ym, type = "l", col = 5)
+```
+
+```{r}
+#Consumo basal de snacks, ceteris paribus, efecto género edad:
+# Aquí se genera un cambio en los datos sobre la edad para ver el efecto del coeficiente asociado a la interacción genero . edad sobre la pendiente de la recta.
+
+#F1: (160, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+#F2: (160, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+#M1: (160, 13, 1, 0, 0, 0, 0, 0, 0, 0, 14)
+#M2: (160, 18, 1, 0, 0, 0, 0, 0, 0, 0, 18)
+
+# Datos
+x <- c(0, 1)
+yf <- c(54.5683819,60.6838489)
+ym <- c(55.0458381, 63.1185976)
+
+# Vectores
+plot(x, yf, type = "l",xlab = "Adolescente", ylab = "Peso", xlim = c(0, 1), ylim = c(53, 63 ), xaxp = c(0, 1, 1), col=2)
+lines(x, ym, type = "l", col = 5)
+```
+
+```{r}
+#Consumos distintos de snacks, ceteris paribus:
+# Ejemplo gráfico para ver el abanico de curvas que se genera al variar la categórica con respecto del consumo basal.
+
+#F1:   (160, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+#F2:   (170, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+#F3:   (160, 16, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+#F4:   (170, 16, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+#F5:   (160, 16, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+#F6:   (170, 16, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+#F7:   (160, 16, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+#F8:   (170, 16, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+#F9:   (160, 16, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+#F10:  (170, 16, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+#F11:  (160, 16, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+#F12:  (170, 16, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+#F13:  (160, 16, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+#F14:  (170, 16, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+
+# Datos
+x <- c(0, 1)
+yf1 <- c(58.2376621, 64.6668851)
+yf2 <- c(56.8860297, 63.3152527)
+yf3 <- c(55.9676259, 62.3968489)
+yf4 <- c(57.6297865, 64.0590095)
+yf5 <- c(57.1430018, 63.5722248)
+yf6 <- c(56.9617003, 63.3909233)
+yf7 <- c(55.6706886, 62.0999116)
+
+# Vectores
+plot(x, yf1, type = "l",xlab = "Adolescente", ylab = "Peso", xlim = c(0, 1), ylim = c(55, 64 ), xaxp = c(0, 1, 1), col=2)
+lines(x, yf2, type = "l", col = 2, lty=2)
+lines(x,yf3,type = "l", col=2, lty=3)
+lines(x,yf4,type = "l", col=2, lty=4)
+lines(x,yf5,type = "l", col=2, lty=5)
+lines(x,yf6,type = "l", col=2, lty=6)
+lines(x,yf7,type = "l", col=2, lty=7)
+```
+
+```{r}
+#Veamos ahora el efecto del consumo con respecto a dos curvas basales de genero . edad:
+
+#F1: (160, 13, 0, 0, 0, 0, 0, 0, 0, 0, 18)
+#F2: (160, 18, 0, 0, 0, 0, 0, 0, 0, 0, 18)
+#M1: (160, 13, 1, 0, 0, 0, 0, 0, 0, 0, 18)
+#M2: (160, 18, 1, 0, 0, 0, 0, 0, 0, 0, 18)
+#M3: (160, 13, 1, 0, 0, 0, 0, 0, 1, 0, 18)
+#M4: (160, 18, 1, 0, 0, 0, 0, 0, 1, 0, 18)
+
+# Datos
+x <- c(0, 1)
+yf1 <- c(54.5683819, 60.6838489)
+ym1 <- c(55.0458381, 63.1185976)
+ym2 <- c(52.4788646, 60.5516241)
+
+# Vectores
+plot(x, yf1, type = "l",xlab = "Adolescente", ylab = "Peso", xlim = c(0, 1), ylim = c(52, 63 ), xaxp = c(0, 1, 1), col=2)
+lines(x, ym1, type = "l", col = 5)
+lines(x,ym2,type = "l", col=5, lty=3)
+```
+
+### Significatividad de los coeficientes del consumo de snacks y género . edad
+
+Con respecto al coeficiente estimado β5 (genero · edad) se observa que es estadísticamente significativo dado que el valor de su p-value es de 0.028 \< 0.05.
+
+Para el coeficiente β4 (consumo semanal snacks) se observa individualmente que solamente las categorías de consumo semanal de snacks de 1, 2 y 3 veces al día no son estadísticamente significativas pues sus p-values de 0.18, 0.11 y 0.27 respectivamente son valores menores a 0.05 .
+
+Este test t permite chequear si los valores medios del peso de los individuos son los mismos según los distintos tipos de ingesta de snacks respecto de la categoría basal. Estos p-valores son válidos para comparaciones individuales respecto de la categoría basal pero no abarcan todas las comparaciones de a pares.
+
+Para evaluar en su conjunto la variable de consumo semanal de snacks es necesario recurrir al F test que permite medir la significatividad conjunta de una variable categórica para explicar la respuesta.
+
+#### Test F
+
+-   Ho: βq = βq+1 = .... βp-1 = 0
+
+    -   H1: al menos un βk con k entre q y (p-1) es tal que βk ≠0
+
+        Se pretende testear si la variable categórica consumo semanal de snacks es significativa para explicar el peso de los adolescentes cuando en el modelo tenemos a la altura, la edad y el género como explicativas.
+
+```{r}
+tidy(anova(modelo_cat))
+```
+
+Como resultado, el ANOVA test, muestra la variable consumo semanal de snacks en su conjunto resulta estadísticamente significativa para explicar el peso ya que el p-valor es 2.66e-07 que es menor a 0.05. Es decir, que pese a que algunas categorías en su comparación individual con la categoría basal sean poco significativas, la variable en su conjunto sí resulta significativa para el modelo.
+
+### Porcentaje de variabilidad explicado por el modelo
+
+```{r}
+summary(modelo_cat)
+```
+
+**El modelo tiene un R2 ajustado que indica que es capaz de explicar el 35,75% de la variabilidad observada. Por otro lado, con un *p-value* de 2.2e-16 se concluye que el modelo es estadísticamente significativo.**
+
+### Propuesta para redefinir la variable consumo semanal de snacks
+
+No comí comida salada o snacks en los últimos 7 días ==\> idem
+
+1 a 3 veces durante los últimos 7 días ==\> idem
+
+4 a 6 veces durante los últimos 7 días ==\> idem
+
+1 vez al día ==\> 1 a 3 veces al día
+
+2 veces al día ==\> 1 a 3 veces al día
+
+3 veces al día ==\> 1 a 3 veces al día
+
+4 o más veces al día ==\> idem
+
+Dato perdido ==\> idem
+
+```{r}
+#Copiamos la variable consumo semanal de snacks para crear la propuesta a partir de ella.
+df_ES_train$Cons_sem_snacks2 <- df_ES_train$consumo_semanal_snacks
+```
+
+```{r}
+#Modificamos el tipo de variable para evitar el error "invalid factor level" que se genera al incluir modificaciones y/o nuevas categorías a la variable
+
+df_ES_train$Cons_sem_snacks2 <- as.character(df_ES_train$Cons_sem_snacks2)
+```
+
+```{r}
+# Realizamos sobre la nueva variable la modificación de las categorías deseadas:
+
+df_ES_train$Cons_sem_snacks2[which(df_ES_train$Cons_sem_snacks2 == "1 vez al día")] = "1 a 3 veces al día"
+
+df_ES_train$Cons_sem_snacks2[which(df_ES_train$Cons_sem_snacks2 == "2 veces al día")] = "1 a 3 veces al día"
+
+df_ES_train$Cons_sem_snacks2[which(df_ES_train$Cons_sem_snacks2 == "3 veces al día")] = "1 a 3 veces al día"
+```
+
+```{r}
+#Volvemos a indicar como factor a la variable modificada:
+
+df_ES_train$Cons_sem_snacks2 <- as.factor(df_ES_train$Cons_sem_snacks2)
+```
+
+```{r}
+table(df_ES_train$Cons_sem_snacks2)
+```
+
+```{r}
+#Reordenamiento del consumo semanal de snacks:
+df_ES_train$Cons_sem_snacks2 <- factor(df_ES_train$Cons_sem_snacks2, levels = c('No comí comida salada o snacks en los últimos 7 días', '1 a 3 veces durante los últimos 7 días', '4 a 6 veces durante los últimos 7 días', '1 a 3 veces al día','4 o más veces al día', 'Dato perdido'))
+```
+
+```{r}
+#Verificamos el orden deseado:
+table(df_ES_train$Cons_sem_snacks2)
+```
+
+```{r}
+# ajustamos el modelo utilizando la variable con la propuesta planteada:
+modelo_cat2 <- lm(peso ~ altura + edad + genero + Cons_sem_snacks2 + (genero*edad) , data = df_ES_train)
+tidy_cat2 <- tidy(modelo_cat2, conf.int = TRUE)
+tidy_cat2
+```
+
+```{r}
+summary(modelo_cat2)
+```
+
+**Como conclusión, las tres categorías que no eran significativas resultaron serlo al plantear un modelo con dichas categorías consolidadas consiguiendo un p-valor estadísticamente significativo de 0.0391, menor a 0.05. Sin embargo, los valores del resto de la variables se vieron afectados aumentando sus p-valores con respecto al modelo que no contaba con estas categorías consolidadas.**
+
+**Finalmente, se observa que la consolidación de estas categorías no generó una mejora sustancial en la capacidad explicativa del modelo dado que R2 ajustado arroja un valor de 35,76%, es decir prácticamente igual al anterior.**
+
+# 4) Modelos propios y evaluación
+
+## Modelos adicionales:
+
+### Modelo Body Mass Index
+
+La lógica del modelo planteado a priori es la de incluir en el modelo una variable con impronta del área de conocimiento, en este caso la salud donde el BMI es un indicador importante. A partir del BMI generaremos la variable propuesta a incluir en el modelo
+
+BMI = peso [kg] / altura[m]2
+
+h = 1/altura[m]2
+
+```{r}
+#Creamos la nueva variable
+df_ES_train$h <- 1/((df_ES_train$altura/10)^2)
+```
+
+```{r}
+#creamos el nuevo modelo
+modelo_p1 <- lm(peso ~ edad + altura + genero + + Cons_sem_snacks2 + (genero*edad) + h , data = df_ES_train)
+tidy_p1 <- tidy(modelo_p1, conf.int = TRUE)
+tidy_p1
+```
+
+```{r}
+summary(modelo_p1)
+```
+
+**Vemos que incluir la variable generada a partir del concepto de BMI aportó información logrando que el modelo pase de un R2 ajustado de 35.76% a 36.14%.**
+
+### Modelo p2. Adicionar consumo alcohol, grasas y gaseosas
+
+La lógica a priori de plantear este modelo es a partir del efecto negativo que suelen generar la ingesta de alcohol, grasas y gaseosas.
+
+```{r}
+#creamos el nuevo modelo
+modelo_p2 <- lm(peso ~ edad + altura + genero + + Cons_sem_snacks2 + (genero*edad) + h + consumo_diario_alcohol + consumo_semanal_comida_grasa + consumo_semanal_gaseosas , data = df_ES_train)
+tidy_p2 <- tidy(modelo_p2, conf.int = TRUE)
+tidy_p2
+```
+
+Vemos que individualmente las categorías agregadas al modelo no están siendo estadísticamente significativas.
+
+Evaluando desde el punto de las variables en su conjunto:
+
+```{r}
+tidy(anova(modelo_p2))
+```
+
+El ANOVA test, muestra que cada una de las variables categóricas en su conjunto resultan estadísticamente significativas al presentar p-valores menores a 0.05.
+
+A continuación analizamos el resultado del modelo según:
+
+```{r}
+summary(modelo_p2)
+```
+
+**Observamos que incluir variables de ingesta de alcohol, grasas y gaseosas aportaron información al modelo previo logrando aumentar la explicabilidad obteniéndose un R2 ajustado de 36.4%.**
+
+## Evaluación de Performance de Modelos
+
+```{r}
+# armamos lista con todos los modelos
+
+models <- list(modelo_incial=modelo_incial,
+                modelo_cat2 = modelo_cat2,
+                modelo_p1 = modelo_p1,
+                modelo_p2 = modelo_p2)
+
+# calculamos las variables resumen
+purrr::map_df(models, broom::tidy, .id = "model")
+```
+
+```{r}
+# calculamos las métricas para todos los modelos
+df_evaluacion_train = map_df(models, broom::glance, .id = "model") %>%
+  # ordenamos por R2 ajustado
+  arrange(desc(adj.r.squared))
+
+df_evaluacion_train
+```
+
+### **Selección del mejor modelo en training a partir de R2**
+
+Al no presentar todos los modelos igual número de variables, es necesario compararlos a través del R2 ajustado.
+
+Por lo antedicho, el ***mejor modelo*** es ***p2*** con un ***R2 ajustado de 36.40%*** que resultó de incorporar al modelo categórico la variable desarrollada a partir del concepto de BMI y la adición de las variables inherentes a la ingesta de alcohol, grasas y gaseosas.
+
+### Selección del mejor modelo predictivo a partir del RMSE
+
+Al predecir nuevos datos interesa comparar el error del modelo en el dataset de **training** **Vs** **testing**.
+
+RMSE (root mean square error) es una métrica para evaluar dicho error de predicción.
+
+Antes de continuar, deberemos cargar el dataset de testing y agregarle las variables nuevas creadas en training.
+
+```{r}
+#Carga del data set de testing
+ES_test <- read.csv("c:/TEAPCX/CECI/MaestriaDataMining/EEA/EEA-2022/trabajos_practicos/Datasets/encuesta_salud_test.csv")
+
+df_ES_test <- as.data.frame(ES_test)
+```
+
+```{r}
+#Creamos las nuevas variables en testing
+
+# Consolidado de variables en Consumo de Snacks
+df_ES_test$Cons_sem_snacks2 <- df_ES_test$consumo_semanal_snacks
+
+df_ES_test$Cons_sem_snacks2 <- as.character(df_ES_test$Cons_sem_snacks2)
+
+df_ES_test$Cons_sem_snacks2[which(df_ES_test$Cons_sem_snacks2 == "1 vez al día")] = "1 a 3 veces al día"
+
+df_ES_test$Cons_sem_snacks2[which(df_ES_test$Cons_sem_snacks2 == "2 veces al día")] = "1 a 3 veces al día"
+
+df_ES_test$Cons_sem_snacks2[which(df_ES_test$Cons_sem_snacks2 == "3 veces al día")] = "1 a 3 veces al día"
+
+df_ES_test$Cons_sem_snacks2 <- as.factor(df_ES_test$Cons_sem_snacks2)
+
+```
+
+```{r}
+table(df_ES_test$Cons_sem_snacks2)
+```
+
+```{r}
+# Reordenamos la nueva variable como fue reordenada en training
+df_ES_test$Cons_sem_snacks2 <- factor(df_ES_test$Cons_sem_snacks2, levels = c('No comí comida salada o snacks en los últimos 7 días', '1 a 3 veces durante los últimos 7 días', '4 a 6 veces durante los últimos 7 días', '1 a 3 veces al día','4 o más veces al día', 'Dato perdido'))
+```
+
+```{r}
+#Verificamos el reordenamiento
+table(df_ES_test$Cons_sem_snacks2)
+```
+
+```{r}
+# Creamos la variable en función de la altura
+df_ES_test$h <- 1/((df_ES_test$altura/10)^2)
+```
+
+A continuación, vamos a emplear la función augment para predecir el peso sobre el dataset de testeo. Al proporcionar "newdata" solo retorna las columnas .fitted y .resid.
+
+```{r}
+pred_modelo_inicial = augment(modelo_incial, newdata = df_ES_test)
+
+pred_modelo_cat2 = augment(modelo_cat2, newdata = df_ES_test)
+
+pred_modelo_p1 = augment(modelo_p1, newdata = df_ES_test)
+
+pred_modelo_p2 = augment(modelo_p2, newdata = df_ES_test)
+```
+
+Para cada modelo, es posible obtener una visualización del peso real del dato frente al predicho y su residuo:
+
+```{r}
+pred_modelo_inicial %>% dplyr::select(peso, .fitted, .resid)
+```
+
+Luego, se calcula el RMSE:
+
+```{r}
+
+rmse_inicial <- c("inicial",rmse(data = pred_modelo_inicial, truth = peso, estimate = .fitted))
+
+rmse_cat2 <- c("cat2",rmse(data = pred_modelo_cat2, truth = peso, estimate = .fitted))
+
+rmse_p1 <- c("p1",rmse(data = pred_modelo_p1, truth = peso, estimate = .fitted))
+
+rmse_p2 <- c("p2",rmse(data = pred_modelo_p2, truth = peso, estimate = .fitted))
+
+rmse_modelos <- rbind.data.frame(rmse_inicial,rmse_cat2,rmse_p1,rmse_p2)
+
+colnames (rmse_modelos) <- c ("model", "metric", "estimator", "estimate")
+
+arrange(rmse_modelos, estimate)
+```
+
+Se observa que el modelo que obtiene el **menor RMSE** es el **modelo p1** que no es coincidente con los resultados del R2 ajustado donde el modelo seleccionado había sido el p2.
+
+### Selección del mejor modelo predictivo a partir del MAE
+
+**MAE** (Mean absolute error) representa el valor promedio de las diferencias absolutas entre los valores reales y los predichos
+
+```{r}
+mae_inicial <- c("inicial",mae(data = pred_modelo_inicial, truth = peso, estimate = .fitted))
+
+mae_cat2 <- c("cat2",mae(data = pred_modelo_cat2, truth = peso, estimate = .fitted))
+
+mae_p1 <- c("p1",mae(data = pred_modelo_p1, truth = peso, estimate = .fitted))
+
+mae_p2 <- c("p2",mae(data = pred_modelo_p2, truth = peso, estimate = .fitted))
+
+mae_modelos <- rbind.data.frame(mae_inicial,mae_cat2,mae_p1,mae_p2)
+
+colnames (mae_modelos) <- c ("model", "metric", "estimator", "estimate")
+
+arrange(mae_modelos, estimate)
+```
+
+Se observa que el modelo que obtiene el **menor MAE** es el **modelo p2** coincidente con la primera selección y distinta a la segunda según R2 ajustado y RMSE respectivamente.
+
+### Selección final del mejor de los cuatro modelos predictivos
+
+Desde el punto de vista de las medidas de performance, habiéndose calculado el R2 ajustado, RMSE y MAE, se concluye que los **mejores modelos son el p1 y el p2** por su capacidad predictiva y performance frente a los dos primeros.
+
+Los modelos p1 y p2 no presentan diferencias sustanciales entre sí en cuanto a las métricas obtenidas de performance. **El modelo p1 es más sencillo que el p2** dado que cuenta con 3 variables menos, esto último no es menor pues a la hora de pensar al modelo desde su entregable al destinatario final, desde la comunicación de resultados al receptor, se torna más sencillo e interpretable.
+
+Es oportuno mencionar, que la selección del modelo debiera complementarse con un análisis para diagnosticar el cumplimiento, o no, de los supuestos sobre modelos lineales.
+
+# Diagnóstico del modelo inicial
+
+Los supuestos del modelo lineal se pueden resumir en que los errores tienen distribución normal con media cero y varianza constante y son independientes entre sí.
+
+Como los errores son inobservables se trabaja con su correlato empírico: los residuos.
+
+## Gráficas para análisis de validación del modelo lineal
+
+```{r}
+plot(modelo_incial)
+```
+
+### Análisis de la gráfica Residuos Vs Valores Predichos
+
+Un modelo válido requiere de un **patrón de residuos al azar**, es decir que no haya tendencias en los residuos, que sean insesgados. También que la dispersión, **varianza, no** sea **constante** y que los valores no se desvíen del comportamiento observado, **outliers**.
+
+**Se observa** que se presenta **un patrón no azaroso** de los residuos, una figura elíptica centrada en el cero de los residuos para valores predichos de 60. Con radios para dicha elipse de 15 en el eje de los predichos y de 20 para el eje de los residuos. Esta disposición da indicios de falta de comportamiento azaroso. También se visualizan potenciales **outliers**.
+
+**De este primer análisis se desprende que el modelo no estaría cumpliendo con los supuestos de un comportamiento insesgado y homocedástico de los residuos.**
+
+### Análisis de la gráfica Q-Q plot
+
+Se observa una pronunciada curvatura en el extremo derecho de la gráfica. Dicho comportamiento de valores desplazándose de la línea recta nos indican que no hay un comportamiento acorde a una distribución normal para los residuos.
+
+### Análisis de la gráfica de apalancamiento (Leverage)
+
+Si bien se observa un punto extremo de apalancamiento el mismo se encuentra distante a las curvas de Cook por lo que se descarta visualmente un efecto no deseado de apalancamiento que juegue en detrimento de la validación del modelo.
+
+### Validación analítica para el modelo
+
+A continuación, realizaremos una comprobación de las hipótesis deducidas a partir de las gráficas aplicando un ensayo de Shapiro para testear si los residuos presentan un comportamiento asociado a una distribución normal.
+
+```{r}
+shapiro.test(pred_modelo_inicial$.resid)
+```
+
+El test de Shapiro arroja un p-valor menor a 0.05 por lo que hay evidencia estadísticamente significativa para rechazar la hipótesis de que los residuos siguen una distribución normal.
+
+Como conclusión se tiene que fallan dos hipótesis fundamentales para este modelo lineal: la normalidad y la homocedasticidad de los residuos.
+
+# Modelo Robusto
+
+```{r}
+#Carga del data set: encuesta_salud_modelo6.csv
+ES_mod6 <- read.csv("c:/TEAPCX/CECI/MaestriaDataMining/EEA/EEA-2022/trabajos_practicos/Datasets/encuesta_salud_modelo6.csv")
+
+df_ES_mod6 <- as.data.frame(ES_mod6)
+```
+
+```{r}
+require(dplyr)
+
+df_ES_mod6 %>% 
+  dplyr::select(edad, altura, peso, dias_consumo_comida_rapida, consumo_diario_alcohol, dias_actividad_fisica_semanal) %>%# desestimamos algunas variables
+  ggpairs(.,
+            mapping = aes(colour = df_ES_mod6$genero, alpha = 0.5),
+            title = "Matriz de correlaciones",
+            diag = list(continuous = "densityDiag", alpha=0.5),
+            upper = list(continuous = wrap("cor", size = 2.5, hjust=0.5)),
+            lower = list(continuous = wrap("barDiag", size = 3, hjust=0.5)),
+            legend = 12,
+            labelSize = 8) + 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45, vjust=0.5), legend.position = "bottom")
+```
+
+Comparando este nuevo data set con respecto al inicial, se observa gráficamente que la variable peso disminuye su dispersión volviéndose más cúrtica y desplazando su eje medio hacia a la izquierda. Este efecto es pronunciadamente mayor para el género femenino.
+
+En la variable altura aparece una incisión en el eje medio de todos los histogramas asociados con las otras variables.
+
+En particular la relación entre las variables peso y altura se ve significativamente alterada. Las correlaciones caen con respecto al primer data set. El coeficiente de correlación inicial baja de 0.576 a 0.290 cayendo alrededor de un 50%. Y cuando se compara respecto al género, la variación para el femenino pasa de 0.444 a 0.087 es decir una caída de alrededor del 80% cuando en los masculinos los valores son de 0.570 a 0.355 con un descenso de aproximadamente 38%.
+
+Grafiquemos a continuación boxplots para el peso en función de la altura:
+
+```{r}
+# Boxplots de peso en función de la altura
+boxplot(peso~altura,data=df_ES_mod6, main="peso",
+   xlab="altura", ylab="peso")
+```
+
+```{r}
+# Boxplots peso en función de la altura dado el género
+ggplot( df_ES_mod6, aes(x = altura, y = peso)) + 
+  geom_boxplot(alpha = 0.75, aes(fill = genero)) + 
+  theme_minimal() + 
+  theme(legend.position = 'none')+
+  labs(y = "peso en Kg", x = "altura")  +
+  ggtitle("Boxplots de peso en función de la altura")+
+  theme (axis.text.x = element_text(face="italic", colour="dark grey", size = 8, angle = 90))
+```
+
+***En estos dos últimos gráficos es observable que el dataset del modelo 6 presenta considerables valores atípicos.***
+
+***Los valores atípicos impactan considerablemente sobre modelos lineales no robustos causando caídas significativas en sus performances.***
+
+El próximo paso será analizar el impacto de estos valores atípicos sobre el modelo lineal inicial.
+
+## Replanteo del modelo inicial al nuevo dataset modelo 6
+
+**E(peso) = β0 + β1 altura + β2 edad + β3 genero + β4 diasActividadFisicaSemanal + β5 consumoDiarioAlcohol**
+
+```{r}
+modelo_6 <- lm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = df_ES_mod6)
+
+summary(modelo_6)
+```
+
+**El modelo inicial frente al nuevo dataset se ve significativamente afectado desde el punto de vista del R2 ajustado cayendo su capacidad de explicar la variabilidad observada a solamente el 10.95%. con respecto al del modelo incial de 35.4%**
+
+## Veamos a continuación qué sucede con las métricas RMSE y MAE, cómo son impactadas:
+
+Predicción del peso sobre el dataset de testeo a partir del nuevo dataset modelo 6:
+
+```{r}
+pred_modelo_6 = augment(modelo_6, newdata = df_ES_test)
+```
+
+### Cálculo del RMSE:
+
+```{r}
+rmse(data = pred_modelo_6, truth = peso, estimate = .fitted)
+```
+
+**Se observa que el modelo inicial empeora su RMSE pasando de 10.21 a 10.62**.
+
+### Cálculo del MAE:
+
+```{r}
+mae(data = pred_modelo_6, truth = peso, estimate = .fitted)
+```
+
+**Se observa que el modelo inicial empeora su MAE pasando de 7.58 a 8.15**.
+
+## Modelo lineal robusto
+
+### Desarrollo del modelo lineal Robusto
+
+```{r}
+modelo_robust <- rlm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = df_ES_mod6)
+
+summary(modelo_robust)
+```
+
+### Predicción del peso a partir del modelo lineal Robusto
+
+```{r}
+pred_modelo_robust = augment(modelo_robust, newdata = df_ES_test)
+```
+
+### RMSE para el modelo lineal Robusto
+
+```{r}
+rmse(data = pred_modelo_robust, truth = peso, estimate = .fitted)
+```
+
+### MAE para el modelo lineal Robusto
+
+```{r}
+mae(data = pred_modelo_robust, truth = peso, estimate = .fitted)
+```
+
+### Conclusión sobre el modelo lineal robusto.
+
+Los modelos de regresión lineal robusta son métodos alternativos a los de regresión ordinarios ante la presencia de valores atípicos u observaciones influyentes (apalancamiento medido a través de la distancia de Cook).
+
+Como resultado de la aplicación del modelo robusto, se observa la capacidad del modelo robusto frente a un nuevo dataset. Comparando la performance del robusto y el inicial frente al nuevo dataset se observa un RMSE de 10.26 frente al 10.62 obtenido por el modelo inicial. Incluso el modelo robusto es apenas inferior a la performance obtenida por el modelo inicial sobre el data set original, un 0.5% (Vs 10.21).
+
+Además el modelo robusto obtiene un MAE de 7.52 que supera al modelo inicial corrido tanto en el dataset inicial como en el del modelo 6 que arrojaron 7.58 y 8.15 respectivamente.
+
+Finalmente se comprueba que el modelo robusto frente al inicial fue capaz de contener los impactos de los valores atípicos a diferencia del modelo inicial que se encontró considerablemente afectado.
+
+# Links Internet utilizados
+
+<https://www.statology.org/dplyr-select-columns-by-name/>
+
+<https://www.statology.org/dplyr-select-if-multiple-conditions/>
+
+<https://r-charts.com/correlation/ggpairs/>
+
+Tablas de frecuencia: <https://homepage.divms.uiowa.edu/~luke/classes/STAT4580/catone.html>
+
+Histogramas: <https://homepage.divms.uiowa.edu/~luke/classes/STAT4580/catone.html>
+
+R\^2:<https://blog.minitab.com/es/analisis-de-regresion-como-puedo-interpretar-el-r-cuadrado-y-evaluar-la-bondad-de-ajuste>
+
+Change Reference (Baseline) Category in Regression with R \| R Tutorial 5.6 \| MarinStatsLectures: <https://www.youtube.com/watch?v=XJw6xdBYG7c>
+
+Specify Reference Factor Level in Linear Regression in R (Example): <https://statisticsglobe.com/specify-reference-factor-level-in-linear-regression-in-r>
+
+Regresión con efecto de Interacción (moderación entre variable métrica y dicotómica) en STATA
+
+<https://www.youtube.com/watch?v=xDg2xYZuoaY>
+
+Interacción en Regresión: <https://personal.us.es/vararey/adatos2/interaccion.pdf>
+
+Usando pipe %\>% combinado ggplot: <https://swcarpentry.github.io/r-novice-gapminder-es/13-dplyr/>
+
+Regresion Lineal R-Pubs: <https://rpubs.com/Joaquin_AR/226291>
+
+Ploteando:
+
+-   <https://r-coder.com/grafico-lineas-r/>
+
+-   <https://r-charts.com/es/r-base/ejes/>
+
+R2, RMSE, MAE: <https://www.datatechnotes.com/2019/02/regression-model-accuracy-mae-mse-rmse.html>
+
+Interpretación Plots Modelos Lineales:
+
+-   <https://www.maximaformacion.es/blog-dat/como-validar-tu-modelo-de-regresion/>
+
+-   <https://aprender-uib.github.io/AprendeR2/chap-regresion.html#sec:diagn>
+
+Regresión Lineal Robusta en R: <https://statologos.com/regresion-robusta-en-r/>

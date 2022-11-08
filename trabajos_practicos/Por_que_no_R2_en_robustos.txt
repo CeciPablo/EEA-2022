@@ -1,0 +1,6 @@
+https://stackoverflow.com/questions/60073531/is-it-appropriate-to-calculate-r-squared-of-robust-regression-using-rlm
+
+Robust Linear Regression(rlm) is used instead of Linear Regression(lm) when data has many outliers; also it can be used for detecting influential observations. Robust regression uses Iteratively Reweighted Least Squares(IRLS) for Maximum Likelihood Estimation(MLE) whereas linear regression uses Ordinary Least Squares(OLS), which is the reason R-squared(coefficient of determination) is returned by lm() and not by rlm().
+
+Now coming to the appropriateness, it is not an appropriate measure to assess the fit for robust regression since it involves computing squared loss=sum(residual^2)=sum(predicted values-observed values)^2 in the formula for r-squared. Since robust regression involves dealing with data containing many outliers, the metric will result in absurd value due to large values produced from residuals for outliers which are large and also squared!
+This is the reason why absolute loss=(predict-actual) is used to asses fit when outliers are involved.
